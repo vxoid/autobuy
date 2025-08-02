@@ -50,13 +50,16 @@ class TGLogger:
         response.raise_for_status()
         return response_json["result"]["message_id"]
       
-  async def send_message(self, message: str, wait: bool = True):
+  async def send_message(self, message: str, wait: bool = True, reply_to_message_id: int | None = None):
     async with aiohttp.ClientSession() as session:
-      async with session.post(f"https://api.telegram.org/bot{self.token}/sendMessage", json={
+      payload = {
         "text": message,
         "chat_id": self.chat_id,
         "parse_mode": "HTML"
-      }) as response:
+      }
+      if reply_to_message_id is not None:
+        payload["reply_to_message_id"] = reply_to_message_id
+      async with session.post(f"https://api.telegram.org/bot{self.token}/sendMessage", json=payload) as response:
         
         response_json = await response.json()
         if response.status == 429 and wait:

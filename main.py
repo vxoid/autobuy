@@ -101,8 +101,8 @@ async def main():
           logger.warning(Fore.YELLOW + Style.DIM + f"Found {entries} entries, using the first one")
           message = f"* <b>Warning: found {entries} entries, using the first one</b> *\n" + message
 
-        await tg_logger.send_gift_sticker(gift)        
-        await logger.send_message(message)
+        msg_id = await tg_logger.send_gift_sticker(gift)        
+        await tg_logger.send_message(message, reply_to_message_id=msg_id)
         logger.warning(f"title: {title}, id: {gift.id}, e: {gift.sticker.emoji}, price: {gift.price}, sold_out: {gift.is_sold_out}, total_amount: {gift.total_amount}, limited: {gift.is_limited}, file_id: {gift.sticker.file_id}")
         return
       except Exception as e:
