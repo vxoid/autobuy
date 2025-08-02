@@ -23,6 +23,12 @@ async def main():
     help="gift ID to snipe (filter)",
   )
   parser.add_argument(
+    "--title",
+    type=str,
+    required=False,
+    help="title of gift available to snipe (filter)",
+  )
+  parser.add_argument(
     "--price",
     type=int,
     required=False,
@@ -57,6 +63,10 @@ async def main():
     logger.warning(Fore.GREEN + Style.DIM + f"* set ID={args.id}")
     filters["id"] = args.id
 
+  if args.title is not None:
+    logger.warning(Fore.GREEN + Style.DIM + f"* set TITLE={args.title}")
+    filters["title"] = args.title
+
   if args.price is not None:
     logger.warning(Fore.GREEN + Style.DIM + f"* set PRICE={args.price}")
     filters["price"] = args.price
@@ -75,6 +85,9 @@ async def main():
         if filters.get("limited") is not None:
           gifts = filter(lambda g: g.is_limited == filters.get("limited"), gifts)
         
+        if filters.get("title") is not None:
+          gifts = filter(lambda g: g.raw.title == filters.get("title"), gifts)
+
         if filters.get("sold_out") is not None:
           gifts = filter(lambda g: g.is_sold_out == filters.get("sold_out"), gifts)
 
@@ -103,7 +116,6 @@ async def main():
 
         msg_id = await tg_logger.send_gift_sticker(gift)        
         await tg_logger.send_message(message, reply_to_message_id=msg_id)
-        logger.warning(f"title: {title}, id: {gift.id}, e: {gift.sticker.emoji}, price: {gift.price}, sold_out: {gift.is_sold_out}, total_amount: {gift.total_amount}, limited: {gift.is_limited}, file_id: {gift.sticker.file_id}")
         return
       except Exception as e:
         tb_str = traceback.format_exc()
