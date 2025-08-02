@@ -15,44 +15,69 @@ app = Client("session", api_id=api_id, api_hash=api_hash, workdir=workdir)
 logger = logging.getLogger(__name__)
 tg_logger = TGLogger(logger_token, logger_chat_id)
 async def main():
-  parser = argparse.ArgumentParser(description="Telegram autobuy bot CLI")
+  parser = argparse.ArgumentParser(
+    description="Telegram autobuy-bot CLI: snipe gifts by criteria",
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter
+  )
   parser.add_argument(
     "--id",
     type=int,
-    required=False,
-    help="gift ID to snipe (filter)",
+    help=(
+      "Only target gift(s) with this unique ID "
+      "(scans default/all gifts if omitted)"
+    )
   )
   parser.add_argument(
     "--title",
     type=str,
-    required=False,
-    help="title of gift available to snipe (filter)",
+    help=(
+      "Only target gifts whose title matches exactly "
+      "(case-sensitive string comparison)"
+    )
+  )
+  parser.add_argument(
+    "-n",
+    dest="nullable_title",
+    action="store_true",
+    help=(
+      "Allow gift entries with no title (skip title filter) "
+      "if no title is present"
+    )
   )
   parser.add_argument(
     "--price",
     type=int,
-    required=False,
-    help="price in TGStars to snipe (filter)",
+    help=(
+      "Only target gifts with exactly this price "
+      "(in TGStars)"
+    )
   )
   parser.add_argument(
     "--total_amount",
     type=int,
-    required=False,
-    help="total amount of gift available to snipe (filter)",
+    help=(
+      "Only target gifts that have exactly this total available amount"
+    )
   )
   parser.add_argument(
     "--check_every",
     type=int,
-    required=False,
     default=60,
-    help="check gifts every n seconds",
+    metavar="SECS",
+    help=(
+      "Poll for new gifts every N seconds "
+      "(default: %(default)s)"
+    )
   )
   parser.add_argument(
     "--amount",
     type=int,
-    required=False,
     default=1,
-    help="amount of gift to buy",
+    metavar="QTY",
+    help=(
+      "Quantity of gifts to try to purchase on match "
+      "(default: %(default)s)"
+    )
   )
   args = parser.parse_args()
   
@@ -65,7 +90,7 @@ async def main():
 
   if args.title is not None:
     logger.warning(Fore.GREEN + Style.DIM + f"* set TITLE={args.title}")
-    filters["title"] = args.title
+    filters["title"] = args.title.strip()
 
   if args.price is not None:
     logger.warning(Fore.GREEN + Style.DIM + f"* set PRICE={args.price}")
@@ -86,7 +111,7 @@ async def main():
           gifts = filter(lambda g: g.is_limited == filters.get("limited"), gifts)
         
         if filters.get("title") is not None:
-          gifts = filter(lambda g: g.raw.title == filters.get("title"), gifts)
+          gifts = filter(lambda g: g.raw.title == filters.get("title") or (args.nullable_title and g.raw.title is None), gifts)
 
         if filters.get("sold_out") is not None:
           gifts = filter(lambda g: g.is_sold_out == filters.get("sold_out"), gifts)
@@ -109,7 +134,8 @@ async def main():
         
         gift = gifts[0]
         title = gift.raw.title
-        message = f"Buying <b>{args.amount}</b> \"{title}\" gifts, estimated cost <b>{gift.price * args.amount}</b> stars...\n\n<span class=\"tg-spoiler\">ID: {gift.id}\nTITLE: {title}\nPRICE: {gift.price} stars\nTOTAL AMOUNT: {gift.total_amount}</span>"
+        t = f" \"{title}\"" if title is not None else ""
+        message = f"Buying <b>{args.amount}</b>{t} gifts, estimated cost <b>{gift.price * args.amount}</b> stars...\n\n<span class=\"tg-spoiler\">ID: {gift.id}\nTITLE: {title}\nPRICE: {gift.price} stars\nTOTAL AMOUNT: {gift.total_amount}</span>"
         if entries > 1:
           logger.warning(Fore.YELLOW + Style.DIM + f"Found {entries} entries, using the first one")
           message = f"* <b>Warning: found {entries} entries, using the first one</b> *\n" + message
@@ -123,4 +149,3 @@ async def main():
     
 if __name__ == "__main__":
   app.run(main())
-
