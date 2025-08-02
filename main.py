@@ -1,15 +1,19 @@
-from pyrogram import Client
-from config import api_hash, api_id
 from colorama import init, Fore, Style
+from config import api_hash, api_id, logger_chat_id, logger_token
+from telegram import TGLogger
+from pyrogram import Client
 import traceback
 import argparse
 import asyncio
+import logging
 import os
 workdir = os.path.join(os.getcwd(), "sessions")
 os.makedirs(workdir, exist_ok=True)
 init(autoreset=True)
 
 app = Client("session", api_id=api_id, api_hash=api_hash, workdir=workdir)
+logger = logging.getLogger(__name__)
+tg_logger = TGLogger(logger_token, logger_chat_id)
 async def main():
   parser = argparse.ArgumentParser(description="Telegram autobuy bot CLI")
   parser.add_argument(
@@ -37,26 +41,33 @@ async def main():
     default=60,
     help="check gifts every n seconds",
   )
+  parser.add_argument(
+    "--amount",
+    type=int,
+    required=False,
+    default=1,
+    help="amount of gift to buy",
+  )
   args = parser.parse_args()
   
   filters = {
     "limited": True
   }
   if args.id is not None:
-    print(Fore.GREEN + Style.DIM + f"* set ID={args.id}")
+    logger.warning(Fore.GREEN + Style.DIM + f"* set ID={args.id}")
     filters["id"] = args.id
 
   if args.price is not None:
-    print(Fore.GREEN + Style.DIM + f"* set PRICE={args.price}")
+    logger.warning(Fore.GREEN + Style.DIM + f"* set PRICE={args.price}")
     filters["price"] = args.price
 
   if args.total_amount is not None:
-    print(Fore.GREEN + Style.DIM + f"* set TOTAL_AMOUNT={args.total_amount}")
+    logger.warning(Fore.GREEN + Style.DIM + f"* set TOTAL_AMOUNT={args.total_amount}")
     filters["total_amount"] = args.total_amount
 
   async with app:
     me = await app.get_me()
-    print(Fore.GREEN + Style.DIM + f"* Bot is connected to | {me.phone_number}:{me.username} |...\n")
+    logger.warning(Fore.GREEN + Style.DIM + f"* Bot is connected to | {me.phone_number}:{me.username} |...\n")
 
     while True:
       try:
@@ -79,19 +90,24 @@ async def main():
         gifts = list(gifts)
         entries = len(gifts)
         if entries <= 0:
-          print(Fore.RED + Style.DIM + f"Nothing found, waiting {args.check_every} secs...")
+          logger.warning(Fore.RED + Style.DIM + f"Nothing found, waiting {args.check_every} secs...")
           await asyncio.sleep(args.check_every)
           continue
-
-        if entries > 1:
-          print(Fore.YELLOW + Style.DIM + f"Found {entries} entries, using the first one")
+        
         gift = gifts[0]
+        title = gift.raw.title
+        message = f"Buying <b>{args.amount}</b> \"{title}\" gifts, estimated cost <b>{gift.price * args.amount}</b> stars...\n\n<span class=\"tg-spoiler\">ID: {gift.id}\nTITLE: {title}\nPRICE: {gift.price} stars\nTOTAL AMOUNT: {gift.total_amount}</span>"
+        if entries > 1:
+          logger.warning(Fore.YELLOW + Style.DIM + f"Found {entries} entries, using the first one")
+          message = f"* <b>Warning: found {entries} entries, using the first one</b> *\n" + message
 
-        print(f"id: {gift.id}, e: {gift.sticker.emoji}, price: {gift.price}, sold_out: {gift.is_sold_out}, total_amount: {gift.total_amount}, limited: {gift.is_limited}")
+        await tg_logger.send_gift_sticker(gift)        
+        await logger.send_message(message)
+        logger.warning(f"title: {title}, id: {gift.id}, e: {gift.sticker.emoji}, price: {gift.price}, sold_out: {gift.is_sold_out}, total_amount: {gift.total_amount}, limited: {gift.is_limited}, file_id: {gift.sticker.file_id}")
         return
       except Exception as e:
         tb_str = traceback.format_exc()
-        print(f"err: {e} / {tb_str}")
+        logger.warning(f"err: {e} / {tb_str}")
     
 if __name__ == "__main__":
   app.run(main())
