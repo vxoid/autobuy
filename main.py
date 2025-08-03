@@ -1,5 +1,6 @@
 from colorama import init, Fore, Style
 from config import api_hash, api_id, logger_chat_id, logger_token
+from pyrogram.types import Gift
 from telegram import TGLogger
 from pyrogram import Client
 import traceback
@@ -7,6 +8,7 @@ import argparse
 import asyncio
 import logging
 import os
+
 workdir = os.path.join(os.getcwd(), "sessions")
 os.makedirs(workdir, exist_ok=True)
 init(autoreset=True)
@@ -82,7 +84,8 @@ async def main():
   args = parser.parse_args()
   
   filters = {
-    "limited": True
+    # "limited": True,
+    # "sold_out": False,
   }
   if args.id is not None:
     logger.warning(Fore.GREEN + Style.DIM + f"* set ID={args.id}")
@@ -102,7 +105,8 @@ async def main():
 
   async with app:
     me = await app.get_me()
-    logger.warning(Fore.GREEN + Style.DIM + f"* Bot is connected to | {me.phone_number}:{me.username} |...\n")
+    star_balance = await app.get_stars_balance()
+    logger.warning(Fore.GREEN + Style.DIM + f"* Bot is connected to | {me.phone_number}:{me.username} |: {star_balance} ⭐...\n")
 
     while True:
       try:
@@ -133,9 +137,9 @@ async def main():
           continue
         
         gift = gifts[0]
-        title = gift.raw.title
-        t = f" \"{title}\"" if title is not None else ""
-        message = f"Buying <b>{args.amount}</b>{t} gifts, estimated cost <b>{gift.price * args.amount}</b> stars...\n\n<span class=\"tg-spoiler\">ID: {gift.id}\nTITLE: {title}\nPRICE: {gift.price} stars\nTOTAL AMOUNT: {gift.total_amount}</span>"
+        total_amount = gift.price * args.amount
+        t = f" \"{gift.raw.title}\"" if gift.raw.title is not None else ""
+        message = f"Buying <b>{args.amount}</b>{t} gifts, estimated cost <b>{total_amount}</b> stars...\n\n<span class=\"tg-spoiler\">ID: {gift.id}\nTITLE: {gift.raw.title}\nPRICE: {gift.price} stars\nTOTAL AMOUNT: {gift.total_amount}</span>"
         if entries > 1:
           logger.warning(Fore.YELLOW + Style.DIM + f"Found {entries} entries, using the first one")
           message = f"* <b>Warning: found {entries} entries, using the first one</b> *\n" + message
@@ -147,5 +151,8 @@ async def main():
         tb_str = traceback.format_exc()
         logger.warning(f"err: {e} / {tb_str}")
     
+async def buy_gift(gift: Gift, amount: int):
+  pass
+
 if __name__ == "__main__":
   app.run(main())
