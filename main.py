@@ -1,5 +1,6 @@
 from colorama import init, Fore, Style
 from config import api_hash, api_id, logger_chat_id, logger_token
+from pyrogram.errors.exceptions import StargiftUsageLimited
 from pyrogram.types import Gift
 from telegram import TGLogger
 from pyrogram import Client
@@ -136,23 +137,50 @@ async def main():
           await asyncio.sleep(args.check_every)
           continue
         
-        gift = gifts[0]
-        total_amount = gift.price * args.amount
-        t = f" \"{gift.raw.title}\"" if gift.raw.title is not None else ""
-        message = f"Buying <b>{args.amount}</b>{t} gifts, estimated cost <b>{total_amount}</b> stars...\n\n<span class=\"tg-spoiler\">ID: {gift.id}\nTITLE: {gift.raw.title}\nPRICE: {gift.price} stars\nTOTAL AMOUNT: {gift.total_amount}</span>"
         if entries > 1:
-          logger.warning(Fore.YELLOW + Style.DIM + f"Found {entries} entries, using the first one")
-          message = f"* <b>Warning: found {entries} entries, using the first one</b> *\n" + message
+          logger.warning(Fore.YELLOW + Style.DIM + f"Found {entries} entries using provided filter")        
+        gift = gifts[0]
+
+        amount_succeeded = await buy_gift(me.id, gift, args.amount)
+
+        total_amount = gift.price * amount_succeeded
+        t = f" \"{gift.raw.title}\"" if gift.raw.title is not None else ""
+        message = (
+          f"<b>Completed</b>: sent <b>{amount_succeeded}</b> of <b>{args.amount}</b>{t} gifts\n"
+          f"<b>Actual cost</b>: <b>{total_amount}</b> ⭐\n\n"
+          f"<span class=\"tg-spoiler\">"
+          f"ID: {gift.id}\n"
+          f"TITLE: {gift.raw.title or 'untitled'}\n"
+          f"PRICE: {gift.price} stars\n"
+          f"TOTAL AMOUNT: {gift.total_amount or 'unlimited'}"
+          f"</span>"
+        )
+        if entries > 1:
+          message = f"* <b>Warning</b>: found {entries} entries using provided filter *\n" + message
 
         msg_id = await tg_logger.send_gift_sticker(gift)        
         await tg_logger.send_message(message, reply_to_message_id=msg_id)
         return
       except Exception as e:
         tb_str = traceback.format_exc()
-        logger.warning(f"err: {e} / {tb_str}")
+        logger.error(f"err: {e} / {tb_str}")
     
-async def buy_gift(gift: Gift, amount: int):
-  pass
+async def buy_gift(receiver_id: int, gift: Gift, amount: int) -> int:
+  i = 0   
+  while True:
+    if i >= amount:
+      return i
+    
+    try: 
+      await gift._client.send_gift(receiver_id, gift.id)
+    except StargiftUsageLimited:
+      logger.error(Fore.RED + f"Gift is sold out")
+      return i
+    except Exception as e:
+      logger.error(f"send_gift err: {e}")
+      return i
+    
+    i += 1
 
 if __name__ == "__main__":
   app.run(main())
