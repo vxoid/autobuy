@@ -203,3 +203,4 @@ __marimo__/
 .streamlit/secrets.toml
 sessions/*
 cache/*.tgs
+unknown_errors.txt
