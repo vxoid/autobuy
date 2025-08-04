@@ -85,8 +85,8 @@ async def main():
   args = parser.parse_args()
   
   filters = {
-    # "limited": True,
-    # "sold_out": False,
+    "limited": True,
+    "sold_out": False,
   }
   if args.id is not None:
     logger.warning(Fore.GREEN + Style.DIM + f"* set ID={args.id}")
