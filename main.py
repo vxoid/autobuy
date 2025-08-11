@@ -56,6 +56,22 @@ async def main():
     )
   )
   parser.add_argument(
+    "--min-price",
+    type=int,
+    help=(
+      "Only target gifts with exactly this or greater price"
+      "(in TGStars)"
+    )
+  )
+  parser.add_argument(
+    "--max-price",
+    type=int,
+    help=(
+      "Only target gifts with exactly this or less price"
+      "(in TGStars)"
+    )
+  )
+  parser.add_argument(
     "--total_amount",
     type=int,
     help=(
@@ -100,6 +116,14 @@ async def main():
     logger.warning(Fore.GREEN + Style.DIM + f"* set PRICE={args.price}")
     filters["price"] = args.price
 
+  if args.min_price is not None:
+    logger.warning(Fore.GREEN + Style.DIM + f"* set MIN_PRICE={args.min_price}")
+    filters["min_price"] = args.min_price
+
+  if args.max_price is not None:
+    logger.warning(Fore.GREEN + Style.DIM + f"* set MAX_PRICE={args.max_price}")
+    filters["max_price"] = args.max_price
+
   if args.total_amount is not None:
     logger.warning(Fore.GREEN + Style.DIM + f"* set TOTAL_AMOUNT={args.total_amount}")
     filters["total_amount"] = args.total_amount
@@ -127,10 +151,16 @@ async def main():
         if filters.get("price") is not None:
           gifts = filter(lambda g: g.price == filters.get("price"), gifts)
 
+        if filters.get("min_price") is not None:
+          gifts = filter(lambda g: g.price >= filters.get("min_price"), gifts)
+
+        if filters.get("max_price") is not None:
+          gifts = filter(lambda g: g.price <= filters.get("max_price"), gifts)
+
         if filters.get("total_amount") is not None:
           gifts = filter(lambda g: g.total_amount == filters.get("total_amount"), gifts)
-
-        gifts = list(gifts)
+        
+        gifts = list(sorted(list(gifts), key=lambda g: g.total_amount))
         entries = len(gifts)
         if entries <= 0:
           logger.warning(Fore.RED + Style.DIM + f"Nothing found, waiting {args.check_every} secs...")
