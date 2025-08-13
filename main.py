@@ -60,7 +60,7 @@ async def main():
     "--min-price",
     type=int,
     help=(
-      "Only target gifts with exactly this or greater price"
+      "Only target gifts with exactly this or greater price "
       "(in TGStars)"
     )
   )
@@ -68,15 +68,29 @@ async def main():
     "--max-price",
     type=int,
     help=(
-      "Only target gifts with exactly this or less price"
+      "Only target gifts with exactly this or less price "
       "(in TGStars)"
     )
   )
   parser.add_argument(
-    "--total-amount",
+    "--supply",
     type=int,
     help=(
       "Only target gifts that have exactly this total available amount/supply"
+    )
+  )
+  parser.add_argument(
+    "--min-supply",
+    type=int,
+    help=(
+      "Only target gifts with exactly this or greater total available amount/supply"
+    )
+  )
+  parser.add_argument(
+    "--max-supply",
+    type=int,
+    help=(
+      "Only target gifts with exactly this or less available amount/supply"
     )
   )
   parser.add_argument(
@@ -135,9 +149,17 @@ async def main():
     logger.warning(Fore.GREEN + Style.DIM + f"* set MAX_PRICE={args.max_price}")
     filters["max_price"] = args.max_price
 
-  if args.total_amount is not None:
-    logger.warning(Fore.GREEN + Style.DIM + f"* set TOTAL_AMOUNT={args.total_amount}")
-    filters["total_amount"] = args.total_amount
+  if args.min_supply is not None:
+    logger.warning(Fore.GREEN + Style.DIM + f"* set MIN_SUPPLY={args.min_supply}")
+    filters["min_supply"] = args.min_supply
+
+  if args.max_supply is not None:
+    logger.warning(Fore.GREEN + Style.DIM + f"* set MAX_SUPPLY={args.max_supply}")
+    filters["max_supply"] = args.max_supply
+
+  if args.supply is not None:
+    logger.warning(Fore.GREEN + Style.DIM + f"* set SUPPLY={args.supply}")
+    filters["supply"] = args.supply
   
   if args.star_amount is not None:
     logger.warning(Fore.GREEN + Style.DIM + f"* set STAR_AMOUNT={args.star_amount} (skipping AMOUNT)")
@@ -181,9 +203,15 @@ async def main():
         if filters.get("max_price") is not None:
           gifts = filter(lambda g: g.price <= filters.get("max_price"), gifts)
 
-        if filters.get("total_amount") is not None:
-          gifts = filter(lambda g: g.total_amount == filters.get("total_amount"), gifts)
-        
+        if filters.get("supply") is not None:
+          gifts = filter(lambda g: g.total_amount == filters.get("supply"), gifts)
+
+        if filters.get("min_supply") is not None:
+          gifts = filter(lambda g: g.total_amount >= filters.get("min_supply"), gifts)
+
+        if filters.get("max_supply") is not None:
+          gifts = filter(lambda g: g.total_amount <= filters.get("max_supply"), gifts)       
+
         gifts = list(gifts)
         entries = len(gifts)
         if entries <= 0:
@@ -193,7 +221,7 @@ async def main():
         
         if args.star_amount is None:
           gift = gifts[0]
-          amount_succeeded = await buy_gift(me.id, gift, args.amount)
+          amount_succeeded = await buy_gift(app, me.id, gift, args.amount)
 
           total_amount = gift.price * amount_succeeded
           t = f" \"{gift.raw.title}\"" if gift.raw.title is not None else ""
@@ -204,7 +232,7 @@ async def main():
             f"ID: {gift.id}\n"
             f"TITLE: {gift.raw.title or 'untitled'}\n"
             f"PRICE: {gift.price} stars\n"
-            f"TOTAL AMOUNT: {gift.total_amount or 'unlimited'}"
+            f"supply: {gift.total_amount or 'unlimited'}"
             f"</span>"
           )
 
@@ -218,7 +246,7 @@ async def main():
             continue
             
           a = math.floor(remaining_balance / gift.price)
-          amount_succeeded = await buy_gift(me.id, gift, a)
+          amount_succeeded = await buy_gift(app, me.id, gift, a)
 
           total_amount = gift.price * amount_succeeded
           remaining_balance -= total_amount
@@ -230,7 +258,7 @@ async def main():
             f"ID: {gift.id}\n"
             f"TITLE: {gift.raw.title or 'untitled'}\n"
             f"PRICE: {gift.price} stars\n"
-            f"TOTAL AMOUNT: {gift.total_amount or 'unlimited'}"
+            f"supply: {gift.total_amount or 'unlimited'}"
             f"</span>"
           )
 
@@ -250,14 +278,14 @@ async def main():
         tb_str = traceback.format_exc()
         logger.error(f"err: {e} / {tb_str}")
     
-async def buy_gift(receiver_id: int, gift: Gift, amount: int) -> int:
+async def buy_gift(app: Client, receiver_id: int, gift: Gift, amount: int) -> int:
   i = 0   
   while True:
     if i >= amount:
       return i
     
     try: 
-      await gift._client.send_gift(receiver_id, gift.id)
+      await app.send_gift(receiver_id, gift.id)
     except StargiftUsageLimited:
       logger.error(Fore.RED + f"Gift is sold out")
       return i
