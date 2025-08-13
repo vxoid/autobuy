@@ -262,11 +262,11 @@ async def main():
             f"</span>"
           )
 
-          async def send():
-            msg_id = await tg_logger.send_gift_sticker(gift)        
-            await tg_logger.send_message(message, reply_to_message_id=msg_id)
+          async def send(gift_obj, msg):
+            msg_id = await tg_logger.send_gift_sticker(gift_obj)        
+            await tg_logger.send_message(msg, reply_to_message_id=msg_id)
 
-          tasks.append(asyncio.create_task(send()))
+          tasks.append(asyncio.create_task(send(gift, message)))
 
         try:
           await asyncio.gather(*tasks)
