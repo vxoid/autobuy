@@ -8,6 +8,7 @@ import traceback
 import argparse
 import asyncio
 import logging
+import math
 import os
 
 workdir = os.path.join(os.getcwd(), "sessions")
@@ -72,20 +73,30 @@ async def main():
     )
   )
   parser.add_argument(
-    "--total_amount",
+    "--total-amount",
     type=int,
     help=(
-      "Only target gifts that have exactly this total available amount"
+      "Only target gifts that have exactly this total available amount/supply"
     )
   )
   parser.add_argument(
-    "--check_every",
+    "--check-every",
     type=int,
     default=60,
     metavar="SECS",
     help=(
       "Poll for new gifts every N seconds "
       "(default: %(default)s)"
+    )
+  )
+  parser.add_argument(
+    "--star-amount",
+    dest="star_amount",
+    metavar="STARS",
+    type=int,
+    help=(
+      "Amount of telegram stars you're willing to pay"
+      "(alternative to --amount)"
     )
   )
   parser.add_argument(
@@ -127,20 +138,33 @@ async def main():
   if args.total_amount is not None:
     logger.warning(Fore.GREEN + Style.DIM + f"* set TOTAL_AMOUNT={args.total_amount}")
     filters["total_amount"] = args.total_amount
+  
+  if args.star_amount is not None:
+    logger.warning(Fore.GREEN + Style.DIM + f"* set STAR_AMOUNT={args.star_amount} (skipping AMOUNT)")
 
   async with app:
     me = await app.get_me()
     star_balance = await app.get_stars_balance()
     logger.warning(Fore.GREEN + Style.DIM + f"* Bot is connected to | {me.phone_number}:{me.username} |: {star_balance} ⭐...\n")
 
+    if args.star_amount is not None and args.star_amount > star_balance:
+      logger.error(Fore.YELLOW + Style.DIM + f"* Insufficient balance.")
+    
+    remaining_balance = args.star_amount
     while True:
       try:
         gifts = await app.get_available_gifts()
+        gifts = list(sorted(gifts, key=lambda g: float("inf") if g.total_amount is None else g.total_amount))
+
         if filters.get("limited") is not None:
           gifts = filter(lambda g: g.is_limited == filters.get("limited"), gifts)
         
         if filters.get("title") is not None:
-          gifts = filter(lambda g: g.raw.title == filters.get("title") or (args.nullable_title and g.raw.title is None), gifts)
+            gifts = filter(
+                lambda g: (getattr(g.raw, "title", None) == filters["title"]) or 
+                          (args.nullable_title and getattr(g.raw, "title", None) is None),
+                gifts
+            )
 
         if filters.get("sold_out") is not None:
           gifts = filter(lambda g: g.is_sold_out == filters.get("sold_out"), gifts)
@@ -160,36 +184,67 @@ async def main():
         if filters.get("total_amount") is not None:
           gifts = filter(lambda g: g.total_amount == filters.get("total_amount"), gifts)
         
-        gifts = list(sorted(list(gifts), key=lambda g: g.total_amount))
+        gifts = list(gifts)
         entries = len(gifts)
         if entries <= 0:
           logger.warning(Fore.RED + Style.DIM + f"Nothing found, waiting {args.check_every} secs...")
           await asyncio.sleep(args.check_every)
           continue
         
-        if entries > 1:
-          logger.warning(Fore.YELLOW + Style.DIM + f"Found {entries} entries using provided filter")        
-        gift = gifts[0]
+        if args.star_amount is None:
+          gift = gifts[0]
+          amount_succeeded = await buy_gift(me.id, gift, args.amount)
 
-        amount_succeeded = await buy_gift(me.id, gift, args.amount)
+          total_amount = gift.price * amount_succeeded
+          t = f" \"{gift.raw.title}\"" if gift.raw.title is not None else ""
+          message = (
+            f"<b>Completed</b>: sent <b>{amount_succeeded}</b> of <b>{args.amount}</b>{t} gifts\n"
+            f"<b>Actual cost</b>: <b>{total_amount}</b> ⭐\n\n"
+            f"<span class=\"tg-spoiler\">"
+            f"ID: {gift.id}\n"
+            f"TITLE: {gift.raw.title or 'untitled'}\n"
+            f"PRICE: {gift.price} stars\n"
+            f"TOTAL AMOUNT: {gift.total_amount or 'unlimited'}"
+            f"</span>"
+          )
 
-        total_amount = gift.price * amount_succeeded
-        t = f" \"{gift.raw.title}\"" if gift.raw.title is not None else ""
-        message = (
-          f"<b>Completed</b>: sent <b>{amount_succeeded}</b> of <b>{args.amount}</b>{t} gifts\n"
-          f"<b>Actual cost</b>: <b>{total_amount}</b> ⭐\n\n"
-          f"<span class=\"tg-spoiler\">"
-          f"ID: {gift.id}\n"
-          f"TITLE: {gift.raw.title or 'untitled'}\n"
-          f"PRICE: {gift.price} stars\n"
-          f"TOTAL AMOUNT: {gift.total_amount or 'unlimited'}"
-          f"</span>"
-        )
-        if entries > 1:
-          message = f"* <b>Warning</b>: found {entries} entries using provided filter *\n" + message
+          msg_id = await tg_logger.send_gift_sticker(gift)        
+          await tg_logger.send_message(message, reply_to_message_id=msg_id)
+          return
 
-        msg_id = await tg_logger.send_gift_sticker(gift)        
-        await tg_logger.send_message(message, reply_to_message_id=msg_id)
+        tasks = []
+        for gift in gifts:
+          if gift.price > remaining_balance:
+            continue
+            
+          a = math.floor(remaining_balance / gift.price)
+          amount_succeeded = await buy_gift(me.id, gift, a)
+
+          total_amount = gift.price * amount_succeeded
+          remaining_balance -= total_amount
+          t = f" \"{gift.raw.title}\"" if gift.raw.title is not None else ""
+          message = (
+            f"<b>Completed</b>: sent <b>{amount_succeeded}</b> of <b>{a}</b>{t} gifts\n"
+            f"<b>Actual cost</b>: <b>{total_amount}</b> ⭐\n\n"
+            f"<span class=\"tg-spoiler\">"
+            f"ID: {gift.id}\n"
+            f"TITLE: {gift.raw.title or 'untitled'}\n"
+            f"PRICE: {gift.price} stars\n"
+            f"TOTAL AMOUNT: {gift.total_amount or 'unlimited'}"
+            f"</span>"
+          )
+
+          async def send():
+            msg_id = await tg_logger.send_gift_sticker(gift)        
+            await tg_logger.send_message(message, reply_to_message_id=msg_id)
+
+          tasks.append(asyncio.create_task(send()))
+
+        try:
+          await asyncio.gather(*tasks)
+        except Exception as e:
+          tb_str = traceback.format_exc()
+          logger.error(f"err: {e} / {tb_str}")
         return
       except Exception as e:
         tb_str = traceback.format_exc()
