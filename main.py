@@ -1,6 +1,7 @@
 from colorama import init, Fore, Style
 from config import api_hash, api_id, logger_chat_id, logger_token
 from pyrogram.errors.exceptions import StargiftUsageLimited
+from pyrogram.errors import RPCError
 from pyrogram.types import Gift
 from telegram import TGLogger
 from pyrogram import Client
@@ -277,7 +278,12 @@ async def main():
       except Exception as e:
         tb_str = traceback.format_exc()
         logger.error(f"err: {e} / {tb_str}")
-    
+      except (OSError, RPCError) as e:
+        print(f"[WARN] Connection error: {e}, reconnecting...")
+        await app.disconnect()
+        await asyncio.sleep(2)
+        await app.connect()
+
 async def buy_gift(app: Client, receiver_id: int, gift: Gift, amount: int) -> int:
   i = 0   
   while True:
